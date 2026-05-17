@@ -18,5 +18,14 @@ export const MIME_TYPES: StringMap = {
   gif: "image/gif",
   ico: "image/x-icon",
   json: "application/json",
-  webmanifest: "application/manifest+json"
+  map: "application/json",
+  webmanifest: "application/manifest+json",
+  xml: "application/xml",
+  pdf: "application/pdf",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  webp: "image/webp",
+  avif: "image/avif"
 };
