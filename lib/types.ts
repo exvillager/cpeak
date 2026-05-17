@@ -2,6 +2,7 @@ import { IncomingMessage, ServerResponse, type Server } from "node:http";
 import type { Readable } from "node:stream";
 import type { Buffer } from "node:buffer";
 import type { CompressionOptions } from "./internal/types";
+import type { CookieOptions } from "./utils/types";
 import type { CpeakIncomingMessage, CpeakServerResponse } from "./index";
 
 export type { Cpeak } from "./index";
@@ -32,17 +33,22 @@ export interface CpeakRequest<
   [key: string]: any; // allow developers to add their onw extensions (e.g. req.test)
 }
 
-export interface CpeakResponse extends ServerResponse {
+export interface CpeakResponse<ResBody = any> extends ServerResponse {
   sendFile: (path: string, mime?: string) => Promise<void>;
-  status: (code: number) => CpeakResponse;
-  attachment: (filename?: string) => CpeakResponse;
-  cookie: (name: string, value: string, options?: any) => CpeakResponse;
+  status: (code: number) => CpeakResponse<ResBody>;
+  attachment: (filename?: string) => CpeakResponse<ResBody>;
+  cookie: (name: string, value: string, options?: CookieOptions) => CpeakResponse<ResBody>;
   redirect: (location: string) => void;
-  json: (data: any) => Promise<void>;
+  json: (data: ResBody) => Promise<void>;
   compress: (
     mime: string,
     body: Buffer | string | Readable,
     size?: number
+  ) => Promise<void>;
+  render: (
+    filePath: string,
+    data: Record<string, unknown>,
+    mime?: string
   ) => Promise<void>;
   [key: string]: any; // allow developers to add their onw extensions (e.g. res.test)
 }
@@ -63,10 +69,10 @@ export type RouteMiddleware<ReqBody = any, ReqParams = any> = (
   next: Next
 ) => unknown;
 
-// Route handlers: (req, res). To signal an error, throw it.
-export type Handler<ReqBody = any, ReqParams = any> = (
+// Route handlers: (req, res)
+export type Handler<ReqBody = any, ReqParams = any, ResBody = any> = (
   req: CpeakRequest<ReqBody, ReqParams>,
-  res: CpeakResponse
+  res: CpeakResponse<ResBody>
 ) => unknown;
 
 // Represents a single registered route.

@@ -1,89 +1,167 @@
-import fs from "node:fs/promises";
-import { frameworkError } from "../";
+import path from "node:path";
+import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { TransformCallback } from "node:stream";
+import { frameworkError, ErrorCode } from "../";
+import { isClientDisconnect } from "../internal/errors";
 import { compressAndSend } from "../internal/compression";
 import { MIME_TYPES } from "../internal/mimeTypes";
 import type { CpeakRequest, CpeakResponse, Next } from "../types";
 
-function renderTemplate(
-  templateStr: string,
-  data: Record<string, unknown>
-): string {
-  // Initialize variables
-  let result: (string | unknown)[] = [];
+export const MAX_PATTERN = 128;
 
-  let currentIndex = 0;
-
-  while (currentIndex < templateStr.length) {
-    // Find the next opening placeholder
-    const startIdx = templateStr.indexOf("{{", currentIndex);
-    if (startIdx === -1) {
-      // No more placeholders, push the remaining string
-      result.push(templateStr.slice(currentIndex));
-      break;
-    }
-
-    // Push the part before the placeholder
-    result.push(templateStr.slice(currentIndex, startIdx));
-
-    // Find the closing placeholder
-    const endIdx = templateStr.indexOf("}}", startIdx);
-    if (endIdx === -1) {
-      // No closing brace found, treat the rest as plain text
-      result.push(templateStr.slice(startIdx));
-      break;
-    }
-
-    // Extract the variable name
-    const varName = templateStr.slice(startIdx + 2, endIdx).trim();
-
-    // Replace the variable with its value from the data, or use an empty string if not found
-    const replacement = data[varName] !== undefined ? data[varName] : "";
-
-    // Push the replacement to the result array
-    result.push(replacement);
-
-    // Move the index past the current closing placeholder
-    currentIndex = endIdx + 2;
-  }
-
-  // Join all parts into a final string
-  return result.join("");
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
-// Errors to return: recommend to not render files larger than 100KB
-// To Explore: Doing the operation in C++ and return the data as stream back to the client
-// @TODO: remove the file from static map
-// @TODO: escape the string to prevent XSS
-// @TODO: add another {{{ }}} option to not escape the string
+class TemplateTransform extends Transform {
+  private tail = "";
+
+  constructor(
+    private readonly data: Record<string, unknown>,
+    private readonly baseDir: string
+  ) {
+    super();
+  }
+
+  _transform(
+    chunk: Buffer,
+    _: BufferEncoding,
+    callback: TransformCallback
+  ): void {
+    const str = this.tail + chunk.toString("utf8");
+    if (str.length <= MAX_PATTERN) {
+      this.tail = str;
+      callback();
+      return;
+    }
+
+    let boundary = str.length - MAX_PATTERN;
+
+    // Prevent cutting a tag in two
+    for (const [opener, closer] of [
+      ["{{", "}}"],
+      ["<cpeak", ">"]
+    ]) {
+      const last = str.lastIndexOf(opener, boundary - 1);
+      if (last === -1) continue;
+      const closeIdx = str.indexOf(closer, last + opener.length);
+      if (closeIdx === -1 || closeIdx >= boundary)
+        boundary = Math.min(boundary, last);
+    }
+
+    this.tail = str.slice(boundary);
+    const safe = str.slice(0, boundary);
+    if (safe)
+      this.process(safe)
+        .then(() => callback())
+        .catch(callback);
+    else callback();
+  }
+
+  _flush(callback: TransformCallback): void {
+    if (this.tail)
+      this.process(this.tail)
+        .then(() => callback())
+        .catch(callback);
+    else callback();
+  }
+
+  private async process(str: string): Promise<void> {
+    const RE =
+      /<cpeak\s+include="([^"]+)"\s*\/?>|<cpeak\s+html=\{([^}]+)\}\s*\/?>|\{\{([^}]+)\}\}/g;
+    let last = 0;
+
+    for (const match of str.matchAll(RE)) {
+      const idx = match.index!;
+      if (idx > last) this.push(str.slice(last, idx));
+
+      const [, includeSrc, rawKey, escapedKey] = match;
+
+      if (includeSrc !== undefined) {
+        const includePath = path.resolve(this.baseDir, includeSrc);
+        const content = await readFile(includePath, "utf8");
+        const chunks: Buffer[] = [];
+        const nested = new TemplateTransform(
+          this.data,
+          path.dirname(includePath)
+        );
+        await new Promise<void>((resolve, reject) => {
+          nested.on("data", (c: Buffer) => chunks.push(c));
+          nested.on("end", resolve);
+          nested.on("error", reject);
+          nested.end(Buffer.from(content, "utf8"));
+        });
+        this.push(Buffer.concat(chunks));
+      } else if (rawKey !== undefined) {
+        const val = this.data[rawKey.trim()];
+        if (val !== undefined) this.push(String(val));
+      } else {
+        const val = this.data[escapedKey.trim()];
+        if (val !== undefined) this.push(escapeHtml(String(val)));
+      }
+
+      last = idx + match[0].length;
+    }
+
+    if (last < str.length) this.push(str.slice(last));
+  }
+}
+
 const render = () => {
   return function (req: CpeakRequest, res: CpeakResponse, next: Next): void {
     res.render = async (
-      path: string,
+      filePath: string,
       data: Record<string, unknown>,
       mime?: string
     ) => {
+      if (res.headersSent) return;
       if (!mime) {
-        const dotIndex = path.lastIndexOf(".");
-        const fileExtension = dotIndex >= 0 ? path.slice(dotIndex + 1) : "";
+        const dotIndex = filePath.lastIndexOf(".");
+        const fileExtension = dotIndex >= 0 ? filePath.slice(dotIndex + 1) : "";
         mime = MIME_TYPES[fileExtension];
         if (!mime) {
           throw frameworkError(
-            `MIME type is missing for "${path}". Pass it as the third argument or register the extension via cpeak({ mimeTypes: { ${fileExtension || "ext"}: "..." } }).`,
-            res.render
+            `MIME type is missing for "${filePath}". Pass it as the third argument or register the extension via cpeak({ mimeTypes: { ${fileExtension || "ext"}: "..." } }).`,
+            res.render,
+            ErrorCode.MISSING_MIME
           );
         }
       }
 
-      let fileStr = await fs.readFile(path, "utf-8");
-      const finalStr = renderTemplate(fileStr, data);
+      const resolved = path.resolve(filePath);
 
-      if (res._compression) {
-        await compressAndSend(res, mime, finalStr, res._compression);
-        return;
+      try {
+        if (res._compression) {
+          const readStream = createReadStream(resolved);
+          const transform = new TemplateTransform(data, path.dirname(resolved));
+          pipeline(readStream, transform).catch(() => {});
+          await compressAndSend(res, mime, transform, res._compression);
+          return;
+        }
+
+        res.setHeader("Content-Type", mime);
+        await pipeline(
+          createReadStream(resolved),
+          new TemplateTransform(data, path.dirname(resolved)),
+          res
+        );
+      } catch (err: any) {
+        throw frameworkError(
+          `Failed to render "${filePath}." Error: ${err as Error}`,
+          res.render,
+          ErrorCode.RENDER_FAIL,
+          undefined,
+          isClientDisconnect(err)
+        );
       }
-
-      res.setHeader("Content-Type", mime);
-      res.end(finalStr);
     };
 
     next();
