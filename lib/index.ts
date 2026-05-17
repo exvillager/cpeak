@@ -13,9 +13,13 @@ import {
 } from "./internal/compression";
 import { MIME_TYPES } from "./internal/mimeTypes";
 import { Router } from "./internal/router";
-import { frameworkError, ErrorCode } from "./internal/errors";
+import {
+  frameworkError,
+  ErrorCode,
+  isClientDisconnect
+} from "./internal/errors";
 
-export { frameworkError, ErrorCode };
+export { frameworkError, ErrorCode, isClientDisconnect };
 
 import type {
   StringMap,
@@ -64,6 +68,7 @@ export class CpeakServerResponse extends http.ServerResponse<CpeakIncomingMessag
 
   // Send a file back to the client
   async sendFile(path: string, mime?: string) {
+    if (this.headersSent) return;
     if (!mime) {
       const dotIndex = path.lastIndexOf(".");
       const fileExtension = dotIndex >= 0 ? path.slice(dotIndex + 1) : "";
@@ -115,7 +120,9 @@ export class CpeakServerResponse extends http.ServerResponse<CpeakIncomingMessag
       throw frameworkError(
         `Failed to send file: ${path}`,
         this.sendFile,
-        ErrorCode.SEND_FILE_FAIL
+        ErrorCode.SEND_FILE_FAIL,
+        undefined,
+        isClientDisconnect(err)
       );
     }
   }
@@ -144,6 +151,7 @@ export class CpeakServerResponse extends http.ServerResponse<CpeakIncomingMessag
   // Send a json data back to the client.
   // This is only good for bodies that their size is less than the highWaterMark value.
   json(data: any): Promise<void> {
+    if (this.headersSent) return Promise.resolve();
     const body = JSON.stringify(data);
     if (this._compression) {
       return compressAndSend(this, "application/json", body, this._compression);
@@ -153,12 +161,21 @@ export class CpeakServerResponse extends http.ServerResponse<CpeakIncomingMessag
     return Promise.resolve();
   }
 
+  render(): Promise<void> {
+    throw frameworkError(
+      "render middleware not registered. Add render() via app.beforeEach(render()) to use res.render.",
+      this.render,
+      ErrorCode.RENDER_NOT_ENABLED
+    );
+  }
+
   // Explicit compression entry point. A developer can use this in any custom handler to compress arbitrary responses
   compress(
     mime: string,
     body: Buffer | string | Readable,
     size?: number
   ): Promise<void> {
+    if (this.headersSent) return Promise.resolve();
     if (!this._compression) {
       throw frameworkError(
         "compression is not enabled. Pass `compression` to cpeak({ compression: true | { ... } }) to use res.compress.",
@@ -212,9 +229,13 @@ export class Cpeak {
         const dispatchError = async (error: unknown) => {
           if (res.headersSent) {
             req.socket?.destroy();
-            return;
+          } else {
+            res.setHeader("Connection", "close");
           }
-          res.setHeader("Connection", "close");
+
+          if (isClientDisconnect(error) && !(error as any).clientDisconnect) {
+            (error as any).clientDisconnect = true;
+          }
           try {
             await this.#handleErr?.(error, req, res);
           } catch (handlerFailure) {
