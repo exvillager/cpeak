@@ -168,4 +168,20 @@ const render = () => {
   };
 };
 
-export { render };
+async function renderToString(
+  filePath: string,
+  data: Record<string, unknown>
+): Promise<string> {
+  const resolved = path.resolve(filePath);
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const transform = new TemplateTransform(data, path.dirname(resolved));
+    transform.on("data", (c: Buffer) => chunks.push(c));
+    transform.on("end", resolve);
+    transform.on("error", reject);
+    createReadStream(resolved).pipe(transform);
+  });
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export { render, renderToString };

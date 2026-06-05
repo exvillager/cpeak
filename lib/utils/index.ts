@@ -1,6 +1,6 @@
 import { parseJSON } from "./parseJSON";
 import { serveStatic } from "./serveStatic";
-import { render } from "./render";
+import { render, renderToString } from "./render";
 import { swagger } from "./swagger";
 import { auth, hashPassword, verifyPassword } from "./auth";
 import { cookieParser } from "./cookieParser";
@@ -10,6 +10,7 @@ export {
   serveStatic,
   parseJSON,
   render,
+  renderToString,
   swagger,
   auth,
   hashPassword,
