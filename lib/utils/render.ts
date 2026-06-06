@@ -115,7 +115,7 @@ class TemplateTransform extends Transform {
   }
 }
 
-const render = () => {
+function render() {
   return function (req: CpeakRequest, res: CpeakResponse, next: Next): void {
     res.render = async (
       filePath: string,
@@ -166,9 +166,9 @@ const render = () => {
 
     next();
   };
-};
+}
 
-async function renderToString(
+render.string = async function (
   filePath: string,
   data: Record<string, unknown>
 ): Promise<string> {
@@ -182,6 +182,11 @@ async function renderToString(
     createReadStream(resolved).pipe(transform);
   });
   return Buffer.concat(chunks).toString("utf8");
-}
+};
 
-export { render, renderToString };
+// TODO: implement stream engine
+render.stream = function (_filePath: string, _data: Record<string, unknown>): never {
+  throw new Error("render.stream is not yet implemented");
+};
+
+export { render };

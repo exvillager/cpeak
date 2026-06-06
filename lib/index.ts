@@ -403,7 +403,6 @@ export {
   serveStatic,
   parseJSON,
   render,
-  renderToString,
   swagger,
   auth,
   hashPassword,
