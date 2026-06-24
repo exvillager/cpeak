@@ -34,10 +34,13 @@ import type {
 
 import type { ResolvedCompressionConfig } from "./internal/types";
 
+const empty_object = Object.freeze({})
+
 export class CpeakIncomingMessage extends http.IncomingMessage {
   // We define body and params here for better V8 optimization (not changing the shape of the object at runtime)
   public body: any = undefined;
-  public params: StringMap = {};
+  // users shouldn't be able to mutate params.
+  public params: StringMap = empty_object;
 
   #query?: StringMap;
 
@@ -52,7 +55,7 @@ export class CpeakIncomingMessage extends http.IncomingMessage {
     const qIndex = url.indexOf("?");
 
     if (qIndex === -1) {
-      this.#query = {};
+      this.#query = empty_object;
     } else {
       const searchParams = new URLSearchParams(url.substring(qIndex + 1));
       this.#query = Object.fromEntries(searchParams.entries());
