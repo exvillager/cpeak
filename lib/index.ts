@@ -34,10 +34,13 @@ import type {
 
 import type { ResolvedCompressionConfig } from "./internal/types";
 
+const empty_object = Object.freeze({})
+
 export class CpeakIncomingMessage extends http.IncomingMessage {
   // We define body and params here for better V8 optimization (not changing the shape of the object at runtime)
   public body: any = undefined;
-  public params: StringMap = {};
+  // users shouldn't be able to mutate params.
+  public params: StringMap = empty_object;
 
   #query?: StringMap;
 
@@ -52,7 +55,7 @@ export class CpeakIncomingMessage extends http.IncomingMessage {
     const qIndex = url.indexOf("?");
 
     if (qIndex === -1) {
-      this.#query = {};
+      this.#query = empty_object;
     } else {
       const searchParams = new URLSearchParams(url.substring(qIndex + 1));
       this.#query = Object.fromEntries(searchParams.entries());
@@ -226,122 +229,130 @@ export class Cpeak {
         // compression) is caught. If handleErr itself fails, we log and send a
         // bare 500 so the client never gets a hung socket. Returns a Promise
         // that never rejects to avoid unhandled promise rejections in case of errors in handleErr.
-        const dispatchError = async (error: unknown) => {
-          if (res.headersSent) {
-            req.socket?.destroy();
-          } else {
-            res.setHeader("Connection", "close");
-          }
 
-          if (isClientDisconnect(error) && !(error as any).clientDisconnect) {
-            (error as any).clientDisconnect = true;
-          }
-          try {
-            await this.#handleErr?.(error, req, res);
-          } catch (handlerFailure) {
-            console.error(
-              "[cpeak] handleErr failed while processing:",
-              error,
-              "\nReason:",
-              handlerFailure
-            );
-            if (!res.headersSent) {
-              try {
-                res.statusCode = 500;
-                res.end();
-              } catch {}
-            }
-          }
-        };
-
-        // Run all the specific middleware functions for that router only and then run the handler
-        const runHandler = async (
-          req: CpeakRequest,
-          res: CpeakResponse,
-          middleware: RouteMiddleware[],
-          cb: Handler,
-          index: number
-        ) => {
-          // Our exit point...
-          if (index === middleware.length) {
-            // Call the route handler with the modified req and res objects.
-            // Also handle the promise errors by passing them to handleErr to save developers from having to manually wrap every handler in try/catch.
-            try {
-              await cb(req, res);
-            } catch (error) {
-              dispatchError(error);
-            }
-          } else {
-            // Handle the promise errors by passing them to handleErr to save developers from having to manually wrap every route middleware in try/catch.
-            try {
-              await middleware[index](req, res, async (error?: unknown) => {
-                // this function only accepts an error argument to be more compatible with NPM modules that are built for express
-                if (error) {
-                  return dispatchError(error);
-                }
-                await runHandler(req, res, middleware, cb, index + 1);
-              });
-            } catch (error) {
-              dispatchError(error);
-            }
-          }
-        };
-
-        // Run all the middleware functions (beforeEach functions) before we run the corresponding route
-        const runMiddleware = async (
-          req: CpeakRequest,
-          res: CpeakResponse,
-          middleware: Middleware[],
-          index: number
-        ) => {
-          // Our exit point...
-          if (index === middleware.length) {
-            const method = req.method?.toLowerCase() || "";
-            const found = this.#router.find(method, urlWithoutQueries || "");
-
-            if (found) {
-              req.params = found.params;
-              return await runHandler(
-                req,
-                res,
-                found.middleware,
-                found.handler,
-                0
-              );
-            }
-
-            // If a fallback handler is registered, run it before falling back to the default 404
-            if (this.#fallback) {
-              try {
-                return await this.#fallback(req, res);
-              } catch (error) {
-                return dispatchError(error);
-              }
-            }
-
-            // If the requested route dose not exist, and developer has not registered the fallback handler, return 404
-            return res
-              .status(404)
-              .json({ error: `Cannot ${req.method} ${urlWithoutQueries}` });
-          } else {
-            try {
-              await middleware[index](req, res, async (err?: unknown) => {
-                if (err) {
-                  return dispatchError(err);
-                }
-                await runMiddleware(req, res, middleware, index + 1);
-              });
-            } catch (error) {
-              dispatchError(error);
-            }
-          }
-        };
-
-        await runMiddleware(req, res, this.#middleware, 0);
+        await this.#runMiddleware(req, res, this.#middleware, 0, urlWithoutQueries);
       }
     );
   }
 
+  // Run all the specific middleware functions for that router only and then run the handler
+  async #runHandler (
+    req: CpeakRequest,
+    res: CpeakResponse,
+    middleware: RouteMiddleware[],
+    cb: Handler,
+    index: number
+  ) {
+    // Our exit point...
+    if (index === middleware.length) {
+      // Call the route handler with the modified req and res objects.
+      // Also handle the promise errors by passing them to handleErr to save developers from having to manually wrap every handler in try/catch.
+      try {
+        await cb(req, res);
+      } catch (error) {
+        this.#dispatchError(error,req,res);
+      }
+    } else {
+      // Handle the promise errors by passing them to handleErr to save developers from having to manually wrap every route middleware in try/catch.
+      try {
+        await middleware[index](req, res, async (error?: unknown) => {
+          // this function only accepts an error argument to be more compatible with NPM modules that are built for express
+          if (error) {
+            return this.#dispatchError(error,req,res);
+          }
+          await this.#runHandler(req, res, middleware, cb, index + 1);
+        });
+      } catch (error) {
+        this.#dispatchError(error,req,res);
+      }
+    }
+  };
+  
+  // Run all the middleware functions (beforeEach functions) before we run the corresponding route
+  async #runMiddleware(
+    req: CpeakRequest,
+    res: CpeakResponse,
+    middleware: Middleware[],
+    index: number,
+    urlWithoutQueries ?: string
+    ) {
+    // Our exit point...
+    if (index === middleware.length) {
+      const method = req.method?.toLowerCase() || "";
+      const found = this.#router.find(method, urlWithoutQueries || "");
+
+      if (found) {
+        req.params = found.params;
+        return await this.#runHandler(
+          req,
+          res,
+          found.middleware,
+          found.handler,
+          0
+        );
+      }
+
+      // If a fallback handler is registered, run it before falling back to the default 404
+      if (this.#fallback) {
+        try {
+          return await this.#fallback(req, res);
+        } catch (error) {
+          return this.#dispatchError(error,req,res);
+        }
+      }
+
+      // If the requested route dose not exist, and developer has not registered the fallback handler, return 404
+      return res
+        .status(404)
+        .json({ error: `Cannot ${req.method} ${urlWithoutQueries}` });
+    } else {
+      try {
+        await middleware[index](req, res, async (err?: unknown) => {
+          if (err) {
+            return this.#dispatchError(err,req,res);
+          }
+          await this.#runMiddleware(req, res, middleware, index + 1, urlWithoutQueries);
+        });
+      } catch (error) {
+        this.#dispatchError(error,req,res);
+      }
+    }
+  };
+
+  async #dispatchError(
+    error: unknown,
+    req: CpeakRequest,
+    res: CpeakResponse
+  ) {
+    if (res.headersSent) {
+      req.socket?.destroy();
+    } else {
+      res.setHeader("Connection", "close");
+    }
+  
+    if (isClientDisconnect(error) && !(error as any).clientDisconnect) {
+      (error as any).clientDisconnect = true;
+    }
+  
+    try {
+      await this.#handleErr?.(error, req, res);
+    } catch (handlerFailure) {
+      console.error(
+        "[cpeak] handleErr failed while processing:",
+        error,
+        "\nReason:",
+        handlerFailure
+      );
+  
+      if (!res.headersSent) {
+        try {
+          res.statusCode = 500;
+          res.end();
+        } catch {}
+      }
+    }
+  }
+  
   route(method: string, path: string, ...args: (RouteMiddleware | Handler)[]) {
     // The last argument should always be our handler
     const cb = args.pop() as Handler;
@@ -397,6 +408,9 @@ export class Cpeak {
     return this.#server;
   }
 }
+
+
+
 
 // Util functions
 export {
