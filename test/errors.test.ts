@@ -3,11 +3,7 @@ import supertest from "supertest";
 
 import cpeak from "../lib/";
 
-import type {
-  Cpeak,
-  CpeakRequest,
-  CpeakResponse
-} from "../lib/types";
+import type { Cpeak, CpeakRequest, CpeakResponse } from "../lib/types";
 
 const PORT = 7543;
 const request = supertest(`http://localhost:${PORT}`);

@@ -16,7 +16,9 @@ const serveStatic = (
   // If file names dynamically change often in production, then live option can be set to true to process the folder on every request, but it may have performance implications.
   if (live) {
     const resolvedFolder = path.resolve(folderPath);
-    const excludes = (options?.exclude ?? []).map(e => path.join(resolvedFolder, e));
+    const excludes = (options?.exclude ?? []).map((e) =>
+      path.join(resolvedFolder, e)
+    );
 
     return async function (req: CpeakRequest, res: CpeakResponse, next: Next) {
       const url = req.url;
@@ -29,7 +31,7 @@ const serveStatic = (
       const mime = MIME_TYPES[fileExtension];
 
       if (!mime || !filePath.startsWith(resolvedFolder)) return next();
-      if (excludes.some(e => filePath.startsWith(e))) return next();
+      if (excludes.some((e) => filePath.startsWith(e))) return next();
 
       const stat = await fs.promises.stat(filePath).catch(() => null);
       if (stat?.isFile()) return res.sendFile(filePath, mime);
@@ -39,7 +41,9 @@ const serveStatic = (
   }
 
   const resolvedFolder = path.resolve(folderPath);
-  const excludes = (options?.exclude ?? []).map(e => path.join(resolvedFolder, e));
+  const excludes = (options?.exclude ?? []).map((e) =>
+    path.join(resolvedFolder, e)
+  );
 
   function processFolder(folderPath: string, parentFolder: string) {
     const staticFiles: string[] = [];
@@ -53,12 +57,12 @@ const serveStatic = (
 
       // Check if it's a directory
       if (fs.statSync(fullPath).isDirectory()) {
-        if (excludes.some(e => fullPath.startsWith(e))) continue;
+        if (excludes.some((e) => fullPath.startsWith(e))) continue;
         // If it's a directory, recursively process it
         const subfolderFiles = processFolder(fullPath, parentFolder);
         staticFiles.push(...subfolderFiles);
       } else {
-        if (excludes.some(e => fullPath.startsWith(e))) continue;
+        if (excludes.some((e) => fullPath.startsWith(e))) continue;
         // If it's a file, add it to the array
         const relativePath = path.relative(parentFolder, fullPath);
         const fileExtension = path.extname(file).slice(1);

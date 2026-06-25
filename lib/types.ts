@@ -37,7 +37,11 @@ export interface CpeakResponse<ResBody = any> extends ServerResponse {
   sendFile: (path: string, mime?: string) => Promise<void>;
   status: (code: number) => CpeakResponse<ResBody>;
   attachment: (filename?: string) => CpeakResponse<ResBody>;
-  cookie: (name: string, value: string, options?: CookieOptions) => CpeakResponse<ResBody>;
+  cookie: (
+    name: string,
+    value: string,
+    options?: CookieOptions
+  ) => CpeakResponse<ResBody>;
   redirect: (location: string) => void;
   json: (data: ResBody) => Promise<void>;
   compress: (

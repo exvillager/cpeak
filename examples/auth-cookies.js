@@ -3,7 +3,7 @@ import cpeak, { parseJSON, cookieParser, auth } from "cpeak";
 const app = cpeak();
 
 // In-memory storage for tokens and users. In a real application, you would use a database for them.
-const tokens = {}
+const tokens = {};
 const users = [];
 
 app.beforeEach(parseJSON());
@@ -41,8 +41,8 @@ app.beforeEach(
     },
     revokeToken: async (tokenId) => {
       delete tokens[tokenId];
-    },
-  }),
+    }
+  })
 );
 
 app.route("post", "/register", async (req, res) => {
@@ -53,12 +53,20 @@ app.route("post", "/register", async (req, res) => {
   const user = { id: String(users.length + 1), username, password: hash };
   users.push(user);
 
-  const token = await req.login({ password, hashedPassword: hash, userId: String(user.id) });
+  const token = await req.login({
+    password,
+    hashedPassword: hash,
+    userId: String(user.id)
+  });
 
   // The token is stored in an httpOnly cookie so it's never accessible via JavaScript, which protects against XSS attacks.
-  res.cookie("session", token, { httpOnly: true, secure: true, sameSite: "lax" });
+  res.cookie("session", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax"
+  });
   return res.status(201).json({ ok: true });
-})
+});
 
 app.route("post", "/login", async (req, res) => {
   const { username, password } = req.body;
@@ -68,14 +76,22 @@ app.route("post", "/login", async (req, res) => {
     throw { status: 401, message: "Invalid username or password" };
   }
 
-  const token = await req.login({ password, hashedPassword: user.password, userId: String(user.id) });
+  const token = await req.login({
+    password,
+    hashedPassword: user.password,
+    userId: String(user.id)
+  });
 
   if (!token) {
     throw { status: 401, message: "Invalid username or password" };
   }
 
   // The token is stored in an httpOnly cookie so it's never accessible via JavaScript, which protects against XSS attacks.
-  res.cookie("session", token, { httpOnly: true, secure: true, sameSite: "lax" });
+  res.cookie("session", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "lax"
+  });
   return res.json({ ok: true });
 });
 
@@ -83,7 +99,7 @@ app.route("get", "/profile", requireAuth, async (req, res) => {
   return res.json({ user: req.user });
 });
 
-app.route('delete', '/logout', requireAuth, async (req, res) => {
+app.route("delete", "/logout", requireAuth, async (req, res) => {
   const token = req.cookies.session;
   if (token) await req.logout(token);
 

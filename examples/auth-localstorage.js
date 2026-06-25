@@ -3,7 +3,7 @@ import cpeak, { parseJSON, cookieParser, auth } from "cpeak";
 const app = cpeak();
 
 // In-memory storage for tokens and users. In a real application, you would use a database for them.
-const tokens = {}
+const tokens = {};
 const users = [];
 
 app.beforeEach(parseJSON());
@@ -53,16 +53,16 @@ app.beforeEach(
 
     /** For finer control you can specify all these below, but all are optional and have sensible defaults: */
     // Password hashing (PBKDF2)
-    iterations: 210_000,   // Number of PBKDF2 iterations — higher = slower brute-force
-    keylen: 64,            // Derived key length in bytes
-    digest: "sha512",      // Hash algorithm used by PBKDF2
-    saltSize: 32,          // Random salt length in bytes
+    iterations: 210_000, // Number of PBKDF2 iterations — higher = slower brute-force
+    keylen: 64, // Derived key length in bytes
+    digest: "sha512", // Hash algorithm used by PBKDF2
+    saltSize: 32, // Random salt length in bytes
 
     // Token signing
     hmacAlgorithm: "sha256", // Algorithm used to sign/verify token IDs
-    tokenIdSize: 20,          // Random token ID length in bytes before signing
-    tokenExpiry: 7 * 24 * 60 * 60 * 1000, // Token lifetime in ms (default: 7 days)
-  }),
+    tokenIdSize: 20, // Random token ID length in bytes before signing
+    tokenExpiry: 7 * 24 * 60 * 60 * 1000 // Token lifetime in ms (default: 7 days)
+  })
 );
 
 app.route("post", "/register", async (req, res) => {
@@ -73,9 +73,13 @@ app.route("post", "/register", async (req, res) => {
   const user = { id: String(users.length + 1), username, password: hash };
   users.push(user);
 
-  const token = await req.login({ password, hashedPassword: hash, userId: String(user.id) });
+  const token = await req.login({
+    password,
+    hashedPassword: hash,
+    userId: String(user.id)
+  });
   return res.status(201).json({ token });
-})
+});
 
 app.route("post", "/login", async (req, res) => {
   const { username, password } = req.body;
@@ -87,7 +91,11 @@ app.route("post", "/login", async (req, res) => {
 
   // The client will then save this token and send it in the Authorization header for subsequent requests to protected routes.
   // You can optionally set this as a cookie as well. See the auth-cookies.js example.
-  const token = await req.login({ password, hashedPassword: user.password, userId: String(user.id) });
+  const token = await req.login({
+    password,
+    hashedPassword: user.password,
+    userId: String(user.id)
+  });
   return res.json({ token });
 });
 
@@ -95,7 +103,7 @@ app.route("get", "/profile", requireAuth, async (req, res) => {
   return res.json({ user: req.user });
 });
 
-app.route('delete', '/logout', requireAuth, async (req, res) => {
+app.route("delete", "/logout", requireAuth, async (req, res) => {
   const token = req.headers["authorization"];
   if (token) await req.logout(token);
   return res.status(200).json({ message: "logged out" });

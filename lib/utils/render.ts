@@ -185,7 +185,10 @@ render.string = async function (
 };
 
 // TODO: implement stream engine
-render.stream = function (_filePath: string, _data: Record<string, unknown>): never {
+render.stream = function (
+  _filePath: string,
+  _data: Record<string, unknown>
+): never {
   throw new Error("render.stream is not yet implemented");
 };
 

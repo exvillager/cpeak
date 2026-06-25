@@ -70,7 +70,8 @@ describe("Fallback handler", function () {
 
   it("should throw DUPLICATE_FALLBACK when registered twice", function () {
     const app = cpeak();
-    const handler = (req: CpeakRequest, res: CpeakResponse) => res.status(404).end();
+    const handler = (req: CpeakRequest, res: CpeakResponse) =>
+      res.status(404).end();
 
     app.fallback(handler);
 

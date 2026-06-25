@@ -89,7 +89,9 @@ describe("Routing logic & URL & query parameters", function () {
       "get",
       "/lookup/:slug/posts",
       (req: CpeakRequest, res: CpeakResponse) => {
-        res.status(200).json({ matched: "lookup-slug-posts", params: req.params });
+        res
+          .status(200)
+          .json({ matched: "lookup-slug-posts", params: req.params });
       }
     );
 

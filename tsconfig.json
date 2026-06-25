@@ -3,7 +3,7 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "ES2022",
-    "moduleResolution": "Bundler",        
+    "moduleResolution": "Bundler",
     "strict": true,
 
     "declaration": true,
@@ -14,7 +14,8 @@
     "outDir": "dist",
     "rootDir": "lib",
     "verbatimModuleSyntax": false,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "types": ["node"]
   },
   "include": ["lib/**/*.ts"],
   "exclude": ["node_modules", "dist"]

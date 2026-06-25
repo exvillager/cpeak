@@ -111,24 +111,36 @@ describe("Rendering a template with render middleware", function () {
     const PAD = 5;
     const TOTAL = MAX_PATTERN + 72;
     const content =
-      "A".repeat(TOTAL - MAX_PATTERN - PAD) + "{{ name }}" + "B".repeat(MAX_PATTERN - PAD);
+      "A".repeat(TOTAL - MAX_PATTERN - PAD) +
+      "{{ name }}" +
+      "B".repeat(MAX_PATTERN - PAD);
 
-    const tmpFile = path.join(os.tmpdir(), `cpeak-render-boundary-${Date.now()}.html`);
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `cpeak-render-boundary-${Date.now()}.html`
+    );
     await fs.writeFile(tmpFile, content, "utf-8");
 
     const PORT3 = 7545;
     const tmpServer = cpeak();
     tmpServer.beforeEach(render());
-    tmpServer.route("get", "/boundary", (req: CpeakRequest, res: CpeakResponse) => {
-      return res.render(tmpFile, { name: "World" }, "text/html");
-    });
+    tmpServer.route(
+      "get",
+      "/boundary",
+      (req: CpeakRequest, res: CpeakResponse) => {
+        return res.render(tmpFile, { name: "World" }, "text/html");
+      }
+    );
     await new Promise<void>((resolve) => tmpServer.listen(PORT3, resolve));
     const request3 = supertest(`http://localhost:${PORT3}`);
 
     try {
       const res = await request3.get("/boundary");
       assert.equal(res.status, 200);
-      assert.ok(!res.text.includes("{{"), "raw template syntax should not appear in output");
+      assert.ok(
+        !res.text.includes("{{"),
+        "raw template syntax should not appear in output"
+      );
       assert.ok(res.text.includes("World"), "variable should be substituted");
     } finally {
       await new Promise<void>((resolve) => tmpServer.close(() => resolve()));
@@ -137,7 +149,10 @@ describe("Rendering a template with render middleware", function () {
   });
 
   it("should re-read the file on every request reflecting any changes", async function () {
-    const tmpFile = path.join(os.tmpdir(), `cpeak-render-test-${Date.now()}.html`);
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `cpeak-render-test-${Date.now()}.html`
+    );
     await fs.writeFile(tmpFile, "<p>{{ value }}</p>", "utf-8");
 
     const tmpServer = cpeak();
@@ -154,7 +169,11 @@ describe("Rendering a template with render middleware", function () {
       const first = await request2.get("/live");
       assert.ok(first.text.includes("<p>original</p>"));
 
-      await fs.writeFile(tmpFile, "<p>{{ value }}</p><span>updated</span>", "utf-8");
+      await fs.writeFile(
+        tmpFile,
+        "<p>{{ value }}</p><span>updated</span>",
+        "utf-8"
+      );
 
       const second = await request2.get("/live");
       assert.ok(second.text.includes("<span>updated</span>"));
