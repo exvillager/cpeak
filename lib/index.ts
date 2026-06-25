@@ -34,7 +34,7 @@ import type {
 
 import type { ResolvedCompressionConfig } from "./internal/types";
 
-const empty_object = Object.freeze({})
+const empty_object = Object.freeze({});
 
 export class CpeakIncomingMessage extends http.IncomingMessage {
   // We define body and params here for better V8 optimization (not changing the shape of the object at runtime)
@@ -224,19 +224,19 @@ export class Cpeak {
         const urlWithoutQueries =
           qIndex === -1 ? req.url || "" : req.url?.substring(0, qIndex);
 
-        // Routes every error path through the registered handleErr. Awaits
-        // handleErr so its own async work (or a rejecting res.json under
-        // compression) is caught. If handleErr itself fails, we log and send a
-        // bare 500 so the client never gets a hung socket. Returns a Promise
-        // that never rejects to avoid unhandled promise rejections in case of errors in handleErr.
-
-        await this.#runMiddleware(req, res, this.#middleware, 0, urlWithoutQueries);
+        await this.#runMiddleware(
+          req,
+          res,
+          this.#middleware,
+          0,
+          urlWithoutQueries
+        );
       }
     );
   }
 
   // Run all the specific middleware functions for that router only and then run the handler
-  async #runHandler (
+  async #runHandler(
     req: CpeakRequest,
     res: CpeakResponse,
     middleware: RouteMiddleware[],
@@ -250,7 +250,7 @@ export class Cpeak {
       try {
         await cb(req, res);
       } catch (error) {
-        this.#dispatchError(error,req,res);
+        this.#dispatchError(error, req, res);
       }
     } else {
       // Handle the promise errors by passing them to handleErr to save developers from having to manually wrap every route middleware in try/catch.
@@ -258,24 +258,24 @@ export class Cpeak {
         await middleware[index](req, res, async (error?: unknown) => {
           // this function only accepts an error argument to be more compatible with NPM modules that are built for express
           if (error) {
-            return this.#dispatchError(error,req,res);
+            return this.#dispatchError(error, req, res);
           }
           await this.#runHandler(req, res, middleware, cb, index + 1);
         });
       } catch (error) {
-        this.#dispatchError(error,req,res);
+        this.#dispatchError(error, req, res);
       }
     }
-  };
-  
+  }
+
   // Run all the middleware functions (beforeEach functions) before we run the corresponding route
   async #runMiddleware(
     req: CpeakRequest,
     res: CpeakResponse,
     middleware: Middleware[],
     index: number,
-    urlWithoutQueries ?: string
-    ) {
+    urlWithoutQueries?: string
+  ) {
     // Our exit point...
     if (index === middleware.length) {
       const method = req.method?.toLowerCase() || "";
@@ -297,7 +297,7 @@ export class Cpeak {
         try {
           return await this.#fallback(req, res);
         } catch (error) {
-          return this.#dispatchError(error,req,res);
+          return this.#dispatchError(error, req, res);
         }
       }
 
@@ -309,31 +309,38 @@ export class Cpeak {
       try {
         await middleware[index](req, res, async (err?: unknown) => {
           if (err) {
-            return this.#dispatchError(err,req,res);
+            return this.#dispatchError(err, req, res);
           }
-          await this.#runMiddleware(req, res, middleware, index + 1, urlWithoutQueries);
+          await this.#runMiddleware(
+            req,
+            res,
+            middleware,
+            index + 1,
+            urlWithoutQueries
+          );
         });
       } catch (error) {
-        this.#dispatchError(error,req,res);
+        this.#dispatchError(error, req, res);
       }
     }
-  };
+  }
 
-  async #dispatchError(
-    error: unknown,
-    req: CpeakRequest,
-    res: CpeakResponse
-  ) {
+  // Routes every error path through the registered handleErr. Awaits
+  // handleErr so its own async work (or a rejecting res.json under
+  // compression) is caught. If handleErr itself fails, we log and send a
+  // bare 500 so the client never gets a hung socket. Returns a Promise
+  // that never rejects to avoid unhandled promise rejections in case of errors in handleErr.
+  async #dispatchError(error: unknown, req: CpeakRequest, res: CpeakResponse) {
     if (res.headersSent) {
       req.socket?.destroy();
     } else {
       res.setHeader("Connection", "close");
     }
-  
+
     if (isClientDisconnect(error) && !(error as any).clientDisconnect) {
       (error as any).clientDisconnect = true;
     }
-  
+
     try {
       await this.#handleErr?.(error, req, res);
     } catch (handlerFailure) {
@@ -343,7 +350,7 @@ export class Cpeak {
         "\nReason:",
         handlerFailure
       );
-  
+
       if (!res.headersSent) {
         try {
           res.statusCode = 500;
@@ -352,7 +359,7 @@ export class Cpeak {
       }
     }
   }
-  
+
   route(method: string, path: string, ...args: (RouteMiddleware | Handler)[]) {
     // The last argument should always be our handler
     const cb = args.pop() as Handler;
@@ -408,9 +415,6 @@ export class Cpeak {
     return this.#server;
   }
 }
-
-
-
 
 // Util functions
 export {
