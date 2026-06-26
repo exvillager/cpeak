@@ -370,15 +370,9 @@ export class Cpeak {
       req.url = rawPath;
       const qIndex = rawPath.indexOf("?");
       const path = qIndex === -1 ? rawPath : rawPath.substring(0, qIndex);
-      await app.#runMiddleware(
-        req,
-        res,
-        app.#middleware,
-        0,
-        path
-      );
+      await app.#runMiddleware(req, res, app.#middleware, 0, path);
     };
-    this.route("any", cleanPrefix+'/*', wrapper);
+    this.route("any", prefix, wrapper);
   }
 
   route(method: string, path: string, ...args: (RouteMiddleware | Handler)[]) {
