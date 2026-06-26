@@ -360,6 +360,27 @@ export class Cpeak {
     }
   }
 
+  // Subroute
+  subroute(prefix: string, app: Cpeak) {
+    const cleanPrefix = prefix.endsWith("/*") ? prefix.slice(0, -2) : prefix;
+    const prefixLength = cleanPrefix === "/" ? 0 : cleanPrefix.length;
+
+    const wrapper = async (req: CpeakRequest, res: CpeakResponse) => {
+      const rawPath = req.url?.slice(prefixLength) || "/";
+      req.url = rawPath;
+      const qIndex = rawPath.indexOf("?");
+      const path = qIndex === -1 ? rawPath : rawPath.substring(0, qIndex);
+      await app.#runMiddleware(
+        req,
+        res,
+        app.#middleware,
+        0,
+        path
+      );
+    };
+    this.route("any", cleanPrefix+'/*', wrapper);
+  }
+
   route(method: string, path: string, ...args: (RouteMiddleware | Handler)[]) {
     // The last argument should always be our handler
     const cb = args.pop() as Handler;

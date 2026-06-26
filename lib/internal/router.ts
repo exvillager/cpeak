@@ -142,11 +142,18 @@ export class Router {
   }
 
   find(method: string, path: string): RouteMatch | null {
-    const root = this.#treesByMethod.get(method.toLowerCase());
-    if (!root) return null;
-
     const segments = splitPath(path);
-    return matchSegments(root, segments, 0, []);
+
+    const root = this.#treesByMethod.get(method.toLowerCase());
+    if (root) {
+      const match = matchSegments(root, segments, 0, []);
+      if (match) return match;
+    }
+
+    const anyRoot = this.#treesByMethod.get("any");
+    if (!anyRoot) return null;
+
+    return matchSegments(anyRoot, segments, 0, []);
   }
 }
 
