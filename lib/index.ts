@@ -360,7 +360,14 @@ export class Cpeak {
     }
   }
 
-  // Subroute
+  /**
+   * Mounts a sub-router instance under a given path prefix.
+   *
+   * @param prefix - The base path prefix for the sub-router. If it ends with `/*`,
+   * it acts as a wildcard match for all nested subpaths. Without `/*`, it matches
+   * only the exact prefix path.
+   * @param app - The sub-router Cpeak instance to mount.
+   */
   subroute(prefix: string, app: Cpeak) {
     const cleanPrefix = prefix.endsWith("/*") ? prefix.slice(0, -2) : prefix;
     const prefixLength = cleanPrefix === "/" ? 0 : cleanPrefix.length;
